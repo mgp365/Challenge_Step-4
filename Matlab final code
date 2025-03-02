@@ -1,0 +1,187 @@
+close all
+p = (1+sqrt(5))/2; % Proporción áurea
+q = 1/p; % 1/phi
+e = 2;
+grid on
+
+% Definir los vértices del dodecaedro
+vertices = e * [
+    p, 0, q; -p, 0, q; -p, 0, -q; p, 0, -q;
+    q, p, 0; q, -p, 0; -q, -p, 0; -q, p, 0;
+    0, q, p; 0, q, -p; 0, -q, -p; 0, -q, p;
+    1, 1, 1; 1, -1, 1; -1, -1, 1; -1, 1, 1;
+    -1, 1, -1; 1, 1, -1; 1, -1, -1; -1, -1, -1
+];
+
+% Conectividad de los bordes del dodecaedro
+edges = [...
+    1 13; 13 9; 9 12; 12 14; 14 1;
+    13 5; 5 18; 18 4; 4 1;
+    14 6; 6 19; 19 4;
+    5 8; 8 16; 16 9;
+    19 11; 11 10; 10 18;
+    10 17; 17 8;
+    12 15; 15 2; 2 16;
+    17 3; 3 2;
+    20 3; 20 11;
+    6 7; 7 15;
+    20 7
+];
+
+% Crear la figura para visualización
+figure;
+hold on;
+axis equal;
+colormap(jet);
+alpha(0.5);
+view(3); % Vista en 3D
+
+% Dibujar la esfera en el centro con la nueva forma de revolución
+X = 2 * [0, 0.5, 0.75, 0.9, 0.98, 0.98, 0.9, 0.75, 0.5, 0];
+Y = 2 * [1, 0.87, 0.7, 0.45, 0.15, -0.15, -0.45, -0.7, -0.87, -1];
+
+theta = linspace(0, 2*pi, 12);
+[X_grid, Theta_grid] = meshgrid(X, theta);
+[Y_grid, ~] = meshgrid(Y, theta);
+
+X_rot = X_grid .* cos(Theta_grid);
+Y_rot = X_grid .* sin(Theta_grid);
+Z_rot = Y_grid;
+
+% Visualizar la esfera personalizada
+hEsfera = surf(X_rot, Y_rot, Z_rot, 'EdgeColor', 'k', 'FaceColor', 'interp');
+
+% Crear cilindros entre los puntos conectados
+r = 0.5; % Radio del cilindro
+n_cyl = 10; % Resolución del cilindro
+
+for i = 1:size(edges,1)
+    p1 = vertices(edges(i,1),:);
+    p2 = vertices(edges(i,2),:);
+    
+    % Crear cilindro entre p1 y p2
+    [Xcyl, Ycyl, Zcyl] = create_cylinder(p1, p2, r, n_cyl);
+    surf(Xcyl, Ycyl, Zcyl, 'EdgeColor', 'none', 'FaceColor', 'c');
+end
+
+% Dibujar esferas en los nodos
+for i = 1:size(vertices,1)
+    [Xs, Ys, Zs] = sphere(10);
+    surf(0.8*Xs + vertices(i,1), 0.8*Ys + vertices(i,2), 0.8*Zs + vertices(i,3), 'EdgeColor', 'none', 'FaceColor', 'y');
+end
+
+title('Guajos de naranja');
+xlabel('X'); ylabel('Y'); zlabel('Z');
+lighting gouraud;
+camlight;
+
+% Preparar para exportar STL - método alternativo
+% Obtener los datos de todas las superficies visibles
+ax = gca;
+all_surfaces = findall(ax, 'Type', 'surface');
+
+% Crear un archivo STL manualmente
+filename = 'test2.stl';
+fid = fopen(filename, 'w');
+fprintf(fid, 'solid model\n');
+
+% Procesar cada superficie para extraer triángulos
+for s = 1:length(all_surfaces)
+    surf_obj = all_surfaces(s);
+    
+    % Obtener datos de la superficie
+    x_data = get(surf_obj, 'XData');
+    y_data = get(surf_obj, 'YData');
+    z_data = get(surf_obj, 'ZData');
+    
+    % Convertir la superficie en triángulos
+    [rows, cols] = size(x_data);
+    
+    for i = 1:(rows-1)
+        for j = 1:(cols-1)
+            % Cada cuadrilátero se divide en dos triángulos
+            % Triángulo 1
+            p1 = [x_data(i,j), y_data(i,j), z_data(i,j)];
+            p2 = [x_data(i+1,j), y_data(i+1,j), z_data(i+1,j)];
+            p3 = [x_data(i+1,j+1), y_data(i+1,j+1), z_data(i+1,j+1)];
+            
+            % Calcular normal
+            v1 = p2 - p1;
+            v2 = p3 - p1;
+            normal = cross(v1, v2);
+            if norm(normal) > 0
+                normal = normal / norm(normal);
+            else
+                normal = [0 0 1]; % normal predeterminada si hay problemas
+            end
+            
+            % Escribir triángulo en el archivo STL
+            fprintf(fid, 'facet normal %f %f %f\n', normal);
+            fprintf(fid, '  outer loop\n');
+            fprintf(fid, '    vertex %f %f %f\n', p1);
+            fprintf(fid, '    vertex %f %f %f\n', p2);
+            fprintf(fid, '    vertex %f %f %f\n', p3);
+            fprintf(fid, '  endloop\n');
+            fprintf(fid, 'endfacet\n');
+            
+            % Triángulo 2
+            p1 = [x_data(i,j), y_data(i,j), z_data(i,j)];
+            p2 = [x_data(i+1,j+1), y_data(i+1,j+1), z_data(i+1,j+1)];
+            p3 = [x_data(i,j+1), y_data(i,j+1), z_data(i,j+1)];
+            
+            % Calcular normal
+            v1 = p2 - p1;
+            v2 = p3 - p1;
+            normal = cross(v1, v2);
+            if norm(normal) > 0
+                normal = normal / norm(normal);
+            else
+                normal = [0 0 1]; % normal predeterminada si hay problemas
+            end
+            
+            % Escribir triángulo en el archivo STL
+            fprintf(fid, 'facet normal %f %f %f\n', normal);
+            fprintf(fid, '  outer loop\n');
+            fprintf(fid, '    vertex %f %f %f\n', p1);
+            fprintf(fid, '    vertex %f %f %f\n', p2);
+            fprintf(fid, '    vertex %f %f %f\n', p3);
+            fprintf(fid, '  endloop\n');
+            fprintf(fid, 'endfacet\n');
+        end
+    end
+end
+
+fprintf(fid, 'endsolid model\n');
+fclose(fid);
+
+disp(['Archivo STL generado correctamente como "', filename, '"']);
+
+% Funciones auxiliares
+function [X, Y, Z] = create_cylinder(p1, p2, r, n)
+    v = p2 - p1;
+    height = norm(v);
+    theta = linspace(0, 2*pi, n);
+    Xb = r * cos(theta);
+    Yb = r * sin(theta);
+    Zb = linspace(0, height, 2);
+    [X, Z] = meshgrid(Xb, Zb);
+    [Y, ~] = meshgrid(Yb, Zb);
+    [X, Y, Z] = transform_cylinder(X, Y, Z, p1, p2);
+end
+
+function [Xr, Yr, Zr] = transform_cylinder(X, Y, Z, p1, p2)
+    v = p2 - p1;
+    v = v / norm(v);
+    up = [0 0 1];
+    if norm(cross(up, v)) < 1e-10
+        up = [1 0 0];
+    end
+    w = cross(up, v);
+    w = w / norm(w);
+    u = cross(v, w);
+    R = [u(:), w(:), v(:)];
+    coords = R * [X(:)'; Y(:)'; Z(:)'];
+    Xr = reshape(coords(1,:) + p1(1), size(X));
+    Yr = reshape(coords(2,:) + p1(2), size(Y));
+    Zr = reshape(coords(3,:) + p1(3), size(Z));
+end
